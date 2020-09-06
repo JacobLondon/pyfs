@@ -1,3 +1,6 @@
+import json
+import signal
+import socket
 import socketserver
 import sys
 from typing import Dict, List
@@ -75,10 +78,10 @@ class FileSystem:
         if file:
             return file.read()
 
-_CMD_READ = b"\27R"
-_CMD_WRITE = b"\27W"
-_CMD_OPEN = b"\27O"
-_CMD_CLOSE = b"\27C"
+class Message:
+    def __init__(self, func, args):
+        self.func = func
+        self.args = args
 
 class FileSystemUDPServer(FileSystem):
     # to connect to a FSUDPServer, you need a FSUDPClient
@@ -92,27 +95,45 @@ class FileSystemUDPServer(FileSystem):
         class Handler(socketserver.BaseRequestHandler):
             server = self
             def handle(self):
-                message = self.request[0]
+                message = json.loads(self.request[0])
                 socket = self.request[1]
-                resp = None
 
-                if message.startswith(_CMD_READ):
-                    resp = Handler.server.read(message[2:])
-
-                elif message.startswith(_CMD_WRITE):
-                    Handler.server.write(message[2:])
-
-                elif message.startswith(_CMD_OPEN):
-                    resp = Handler.server.open()
-
-                # TODODOWODOWDF
-                elif message.startswith(_CMD_CLOSE):
-                    pass
-                
+                # this is insane and crazy, but look up the func name from the network,
+                # call it from the server and pass the network args
+                resp = str(getattr(Handler.server, message["func"])(*message["args"]))
+                print(message, resp)
                 if resp is not None:
                     socket.sendto(bytes(resp, "utf-8"), self.client_address)
         self.handler = Handler
 
     def start(self):
+        signal.signal(signal.SIGINT, lambda sig, frame: exit(0))
         with socketserver.UDPServer(("localhost", self.port), self.handler) as server:
             server.serve_forever()
+
+class FileSystemUDPClient(FileSystem):
+    def __init__(self, ip: str, port: int):
+        super().__init__()
+        self.host = (ip, port)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    def open(self, name: str):
+        message = bytes(json.dumps(Message("open", (name,)).__dict__), "utf-8")
+        self.sock.sendto(message, self.host)
+
+        fd = int(self.sock.recv(32))
+        return fd
+
+    def close(self, fd: int):
+        message = bytes(json.dumps(Message("close", (fd,)).__dict__), "utf-8")
+        self.sock.sendto(message, self.host)
+    
+    def write(self, fd: int, val):
+        message = bytes(json.dumps(Message("write", (fd, val)).__dict__), "utf-8")
+        self.sock.sendto(message, self.host)
+    
+    def read(self, fd: int):
+        message = bytes(json.dumps(Message("read", (fd,)).__dict__), "utf-8")
+        self.sock.sendto(message, self.host)
+        return self.sock.recv(1024)
