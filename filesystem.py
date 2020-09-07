@@ -1,3 +1,5 @@
+import errno
+import importlib
 import json
 import signal
 import socket
@@ -33,10 +35,14 @@ class FileSystem:
             exit(1)
 
     def open(self, name: str, fileclass: str="File", filemodule: str="filetypes") -> int:
+        classptr = None
         try:
-            file = getattr(sys.modules[filemodule], fileclass)
+            classptr = getattr(sys.modules[filemodule], fileclass)
         except:
-            return None
+            try:
+                classptr = getattr(importlib.import_module(filemodule), fileclass)
+            except:
+                return None
 
         # already in it
         for i, file in enumerate(self._files.values()):
@@ -47,7 +53,7 @@ class FileSystem:
         # not in it
         self._lock.acquire()
         fd = self._next_fd()
-        self._files[fd] = file(name, fd)
+        self._files[fd] = classptr(name, fd)
         self._lock.release()
         return fd
 
@@ -58,11 +64,14 @@ class FileSystem:
                 del self._files[fd]
                 self._reusable_fds.append(fd)
                 self._lock.release()
+                return 0
+            return 0
+        return errno.ENOENT
 
     def write(self, fd: int, val):
         file = self._file_or_none(fd)
         if file:
-            file.write(val)
+            return file.write(val)
 
     def read(self, fd: int):
         file = self._file_or_none(fd)
@@ -92,18 +101,17 @@ class FileSystemUDPServer(FileSystem):
                     message = json.loads(self.request[0])
                 except:
                     pass
-                socket = self.request[1]
+                sock = self.request[1]
 
                 # this is insane and crazy, but look up the func name from the network,
                 # call it from the server and pass the network args
-                try:
-                    resp = str(getattr(Handler.server, message["func"])(*message["args"]))
-                except:
-                    resp = str(None)
+                #try:
+                resp = str(getattr(Handler.server, message["func"])(*message["args"]))
+                #except:
+                #    print("Bad message?")
+                #    resp = str(None)
                 print(message, bytes(resp, "utf-8"))
-                # EACCES????? WHY?
-                ret = socket.sendto(bytes(resp, "utf-8"), self.client_address)
-                print(ret)
+                sock.sendto(bytes(resp, "utf-8"), self.client_address)
         self.handler = Handler
 
     def start(self):
@@ -122,20 +130,19 @@ class FileSystemUDPClient:
         self.sock.sendto(message, self.host)
 
         # if this is gonna except, the user needs to catch it because the user defines the read func
-        fd = int(self.sock.recv(32))
-        return fd
+        return int(self.sock.recv(32)) # the file descriptor converted from bytes
 
     def close(self, fd: int):
         message = Message("close", (fd,)).format()
         self.sock.sendto(message, self.host)
+        return str(self.sock.recv(32), encoding="utf-8")
 
     def write(self, fd: int, val):
         message = Message("write", (fd, val)).format()
         self.sock.sendto(message, self.host)
+        return str(self.sock.recv(32), encoding="utf-8")
 
     def read(self, fd: int):
         message = Message("read", (fd,)).format()
         self.sock.sendto(message, self.host)
-
-        resp = str(self.sock.recv(1024), encoding="utf-8")
-        return resp
+        return str(self.sock.recv(1024), encoding="utf-8")

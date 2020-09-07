@@ -8,10 +8,12 @@ class File:
         self.name: str = name
         self.fd: int = fd
 
-    def write(self, val):
-        return
+    def write(self, val) -> int:
+        # perform the operation, return error code
+        return 0
 
     def read(self):
+        # perform read, return value which defines __str__
         return self.name
     
     def _incref(self):
@@ -35,12 +37,12 @@ class TextFile(File):
         self.file = open(self.name, "w+")
 
     def __del__(self):
+        self.file.truncate()
         self.file.close()
 
-    def write(self, val):
-        self.file.seek(0)
+    def write(self, val) -> int:
         self.file.write(val)
-        self.file.truncate()
+        return 0
 
     def read(self):
         self.file.seek(0)
