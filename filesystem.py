@@ -1,6 +1,7 @@
 import errno
 import importlib
 import json
+import os
 import signal
 import socket
 import socketserver
@@ -8,8 +9,7 @@ import sys
 from threading import Semaphore
 from typing import Dict, List
 
-import filetypes
-from filetypes import File
+from .filetypes import File
 
 _MAX_DESCRIPTORS = 128
 
@@ -40,8 +40,11 @@ class FileSystem:
             classptr = getattr(sys.modules[filemodule], fileclass)
         except:
             try:
-                classptr = getattr(importlib.import_module(filemodule), fileclass)
+                module = importlib.import_module(filemodule)
+                #print(module, fileclass)
+                classptr = getattr(module, fileclass)
             except:
+                print(f"FileSystem: open: Failed to import {os.getcwd()}{os.sep}{filemodule}.{fileclass}", file=sys.stderr)
                 return None
 
         # already in it
@@ -110,7 +113,7 @@ class FileSystemUDPServer(FileSystem):
                 #except:
                 #    print("Bad message?")
                 #    resp = str(None)
-                print(message, bytes(resp, "utf-8"))
+                #print(message, bytes(resp, "utf-8"))
                 sock.sendto(bytes(resp, "utf-8"), self.client_address)
         self.handler = Handler
 
@@ -145,4 +148,4 @@ class FileSystemUDPClient:
     def read(self, fd: int):
         message = Message("read", (fd,)).format()
         self.sock.sendto(message, self.host)
-        return str(self.sock.recv(1024), encoding="utf-8")
+        return str(self.sock.recv(10000), encoding="utf-8")
