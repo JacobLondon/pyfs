@@ -98,9 +98,10 @@ class FileSystemUDPServer(FileSystem):
     # to connect to a FSUDPServer, you need a FSUDPClient
     # alternatively, standard writes/reads/close/open will work from this end
     # so local programs can just use as a normal FS
-    def __init__(self, port: int):
+    def __init__(self, host: str, port: int):
         super().__init__()
         self.port = port
+        self.host = host
 
         class Handler(socketserver.BaseRequestHandler):
             server = self
@@ -124,7 +125,7 @@ class FileSystemUDPServer(FileSystem):
 
     def start(self):
         signal.signal(signal.SIGINT, lambda sig, frame: exit(0))
-        with socketserver.UDPServer(("localhost", self.port), self.handler) as server:
+        with socketserver.UDPServer((self.host, self.port), self.handler) as server:
             server.serve_forever()
 
 class FileSystemUDPClient:
