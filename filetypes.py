@@ -34,7 +34,7 @@ class File:
         return self._users == 0
 
     def __repr__(self):
-        return str(self.fd)
+        return self.name
 
 class TextFile(File):
     def __init__(self, *args):
