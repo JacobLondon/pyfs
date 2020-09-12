@@ -15,7 +15,12 @@ class File:
     def read(self):
         # perform read, return value which defines __str__
         return self.name
-    
+
+    def close(self) -> None:
+        # operation when _one_ user closes the file,
+        # note __del__ when all users close the file and gc occurs
+        pass
+
     def _incref(self):
         self.lock.acquire()
         self._users += 1

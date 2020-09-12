@@ -9,7 +9,10 @@ import sys
 from threading import Semaphore
 from typing import Dict, List
 
-from .filetypes import File
+try:
+    from .filetypes import File
+except:
+    from filetypes import File
 
 _MAX_DESCRIPTORS = 128
 
@@ -61,7 +64,9 @@ class FileSystem:
         return fd
 
     def close(self, fd: int):
-        if fd in self._files:
+        file = self._file_or_none(fd)
+        if file:
+            file.close()
             if self._files[fd]._decref():
                 self._lock.acquire()
                 del self._files[fd]
