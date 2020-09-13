@@ -120,7 +120,9 @@ class FileSystemUDPServer(FileSystem):
                 #    print("Bad message?")
                 #    resp = str(None)
                 #print(message, bytes(resp, "utf-8"))
-                sock.sendto(bytes(resp, "utf-8"), self.client_address)
+                c = sock.sendto(bytes(resp, "utf-8"), self.client_address)
+                if c < 0:
+                    print("HANDLE ERROR", len(resp), "bytes /", resp)
         self.handler = Handler
 
     def start(self):
@@ -136,22 +138,30 @@ class FileSystemUDPClient:
 
     def open(self, name: str, fileclass: str="File", filemodule: str="filetypes"):
         message = Message("open", (name, fileclass, filemodule)).format()
-        self.sock.sendto(message, self.host)
+        c = self.sock.sendto(message, self.host)
+        if c < 0:
+            print("OPEN", len(message), "bytes /", message)
 
         # if this is gonna except, the user needs to catch it because the user defines the read func
         return int(self.sock.recv(32)) # the file descriptor converted from bytes
 
     def close(self, fd: int):
         message = Message("close", (fd,)).format()
-        self.sock.sendto(message, self.host)
+        c = self.sock.sendto(message, self.host)
+        if c < 0:
+            print("CLOSE ERROR", len(message), "bytes /", message)
         return str(self.sock.recv(32), encoding="utf-8")
 
     def write(self, fd: int, val):
         message = Message("write", (fd, val)).format()
-        self.sock.sendto(message, self.host)
+        c = self.sock.sendto(message, self.host)
+        if c < 0:
+            print("WRITE ERROR", len(message), "bytes /", message)
         return str(self.sock.recv(32), encoding="utf-8")
 
     def read(self, fd: int):
         message = Message("read", (fd,)).format()
-        self.sock.sendto(message, self.host)
-        return str(self.sock.recv(10000), encoding="utf-8")
+        c = self.sock.sendto(message, self.host)
+        if c < 0:
+            print("READ ERROR", len(message), "bytes /", message)
+        return str(self.sock.recv(32768), encoding="utf-8")
