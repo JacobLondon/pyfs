@@ -94,8 +94,8 @@ class Message:
     def format(self):
         return bytes(json.dumps(self.__dict__), "utf-8")
 
-class FileSystemUDPServer(FileSystem):
-    # to connect to a FSUDPServer, you need a FSUDPClient
+class FileSystemTCPServer(FileSystem):
+    # to connect to a FSTCPServer, you need a FSTCPClient
     # alternatively, standard writes/reads/close/open will work from this end
     # so local programs can just use as a normal FS
     def __init__(self, host: str, port: int):
@@ -105,41 +105,48 @@ class FileSystemUDPServer(FileSystem):
 
         class Handler(socketserver.BaseRequestHandler):
             server = self
+            fd_info = {}
             def handle(self):
-                try:
-                    message = json.loads(self.request[0])
-                except:
-                    pass
-                sock = self.request[1]
+                self.timeout = 2
+                print("Client connected:", self.request.getpeername())
+                while True:
+                    try:
+                        self.data = self.request.recv(32768)
+                        message = json.loads(self.data)
+                    except:
+                        print("Client timed out:", self.request.getpeername())
+                        break
 
-                # this is insane and crazy, but look up the func name from the network,
-                # call it from the server and pass the network args
-                #try:
-                resp = str(getattr(Handler.server, message["func"])(*message["args"]))
-                #except:
-                #    print("Bad message?")
-                #    resp = str(None)
-                #print(message, bytes(resp, "utf-8"))
-                c = sock.sendto(bytes(resp, "utf-8"), self.client_address)
-                if c < 0:
-                    print("HANDLE ERROR", len(resp), "bytes /", resp)
+                    # this is insane and crazy, but look up the func name from the network,
+                    # call it from the server and pass the network args
+                    resp = str(getattr(Handler.server, message["func"])(*message["args"]))
+                    try:
+                        self.request.sendall(bytes(resp, "utf-8"))
+                    except:
+                        print("HANDLE ERROR", len(resp), "bytes /", resp)
+                    
+                    if message["func"] == "close":
+                        print("Client disconnected:", self.request.getpeername)
+                        break
         self.handler = Handler
 
     def start(self):
         signal.signal(signal.SIGINT, lambda sig, frame: exit(0))
-        with socketserver.UDPServer((self.host, self.port), self.handler) as server:
+        with socketserver.ThreadingTCPServer((self.host, self.port), self.handler) as server:
             server.serve_forever()
 
-class FileSystemUDPClient:
+class FileSystemTCPClient:
     def __init__(self, ip: str, port: int):
         self.host = (ip, port)
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     def open(self, name: str, fileclass: str="File", filemodule: str="filetypes"):
         message = Message("open", (name, fileclass, filemodule)).format()
-        c = self.sock.sendto(message, self.host)
-        if c < 0:
+        try:
+            self.sock.connect(self.host)
+            self.sock.sendall(message)
+        except:
             print("OPEN", len(message), "bytes /", message)
 
         # if this is gonna except, the user needs to catch it because the user defines the read func
@@ -147,21 +154,24 @@ class FileSystemUDPClient:
 
     def close(self, fd: int):
         message = Message("close", (fd,)).format()
-        c = self.sock.sendto(message, self.host)
-        if c < 0:
+        try:
+            self.sock.sendall(message)
+        except:
             print("CLOSE ERROR", len(message), "bytes /", message)
         return str(self.sock.recv(32), encoding="utf-8")
 
     def write(self, fd: int, val):
         message = Message("write", (fd, val)).format()
-        c = self.sock.sendto(message, self.host)
-        if c < 0:
+        try:
+            self.sock.sendall(message)
+        except:
             print("WRITE ERROR", len(message), "bytes /", message)
         return str(self.sock.recv(32), encoding="utf-8")
 
     def read(self, fd: int):
         message = Message("read", (fd,)).format()
-        c = self.sock.sendto(message, self.host)
-        if c < 0:
+        try:
+            self.sock.sendall(message)
+        except:
             print("READ ERROR", len(message), "bytes /", message)
         return str(self.sock.recv(32768), encoding="utf-8")
