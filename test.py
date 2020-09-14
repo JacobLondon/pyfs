@@ -1,6 +1,6 @@
 from filesystem import *
 
-fs = FileSystemUDPClient("localhost", 5432)
+fs = FileSystemTCPClient("localhost", 5432)
 fd = fs.open("out.txt", "TextFile")
 
 fd2 = fs.open("out.txt", "TextFile")
