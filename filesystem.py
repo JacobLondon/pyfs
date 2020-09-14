@@ -126,7 +126,7 @@ class FileSystemTCPServer(FileSystem):
                         print("HANDLE ERROR", len(resp), "bytes /", resp)
                     
                     if message["func"] == "close":
-                        print("Client disconnected:", self.request.getpeername)
+                        print("Client disconnected:", self.request.getpeername())
                         break
         self.handler = Handler
 
